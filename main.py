@@ -1,6 +1,6 @@
 import time,datetime
-from source.controller.DataManagement.MyTwitterAPI import MyTwitterAPI
-from source.controller.DataManagement.MongoDBHandler import MongoDBHandler
+#from source.controller.DataManagement.MyTwitterAPI import MyTwitterAPI
+#from source.controller.DataManagement.MongoDBHandler import MongoDBHandler
 from source.controller.DataManagement.TransformationUtilities import *
 
 from source.controller.EventDetection.SimilarityMatrixBuilder.LEDSimilarityMatrixBuilder import LEDSimilarityMatrixBuilder
@@ -9,6 +9,7 @@ from source.controller.EventDetection.OptimisedEventDetectorMEDBased import Opti
 from source.controller.EventDetection.EventDetector import EventDetector
 
 from source.controller.EventDetection.Utils.Utils import *
+import argparse
 #---------------------------------------------------------------------------------------------------------------------------------------------
 
 LED_SIM=0
@@ -28,11 +29,13 @@ MAXLAT=46
 MINLON=-80
 MAXLON=-71
 
+# MYCOMMENT
+
 MINTIME=datetime.datetime(2015,8,31)
 MAXTIME=datetime.datetime(2015,10,1)
 
-NUMBER_OF_TWEETS=56021
-NUMBER_OF_TWEETS_MEHDI=798400
+#NUMBER_OF_TWEETS=56021
+#NUMBER_OF_TWEETS_MEHDI=798400
 
 #---------------------------------------------------------------------------------------------------------------------------------------------
 def filterTweets(tweets,minLat=MINLAT,maxLat=MAXLAT,minLon=MINLON,maxLon=MAXLON,minTime=MINTIME,maxTime=MAXTIME) :
@@ -52,11 +55,32 @@ def getTweetsFromCSVFileAndSave(csvFilePath="D:\\PRJS\\Data\\final.csv",mongoDBN
     mongoDBHandler=MongoDBHandler(database_name=mongoDBName,collection_name=mongoCollectionName)
     mongoDBHandler.saveTweetsFromCSVFile(csvFilePath)
 #---------------------------------------------------------------------------------------------------------------------------------------------
-def detectEvents(limit=300,similarityType=MED_SIM,minimalTermPerTweet=MIN_TERM_OCCURENCE,remove_noise_with_poisson_Law=REMOVE_NOISE_WITH_POISSON_LAW,printEvents=True,printInFile="events.txt",useOnlyHashtags=False,mongoDBName='Twitter',mongoCollectionName="tweets") :
+def getTweetFromLine(inputLine):
+    line = inputLine.strip().split(",")
+    _id=line[0]
+    userId=line[1]
+    latitude=float(line[2])
+    longitude=float(line[3])
+    position=Position(latitude,longitude)
+    time=datetime.datetime.fromtimestamp(float(line[4]))
+    text=line[5]
+    hashtags=text.strip().split(" ")
+    return Tweet(_id,userId,text,hashtags,time,position)
+#---------------------------------------------------------------------------------------------------------------------------------------------
+def getTweetsFromFile(inputFilePath="MedInputFile.txt") :
+    tweets=[]
+    with open(inputFilePath) as f :
+            line=f.readline() #Header
+            for line in f :
+                tweets.append(getTweetFromLine(line))
+    return tweets
+                
+#---------------------------------------------------------------------------------------------------------------------------------------------
+def detectEvents(limit=300,similarityType=MED_SIM,minimalTermPerTweet=MIN_TERM_OCCURENCE,remove_noise_with_poisson_Law=REMOVE_NOISE_WITH_POISSON_LAW,printEvents=True,fileName="inputTweets.txt",printInFile="events.txt",useOnlyHashtags=False) :
     staringTime=time.time()
-    mongoDBHandler=MongoDBHandler(database_name=mongoDBName,collection_name=mongoCollectionName)
-    tweets=mongoDBHandler.getAllTweets(limit=limit)
-
+    #mongoDBHandler=MongoDBHandler(database_name=mongoDBName,collection_name=mongoCollectionName)
+    #tweets=mongoDBHandler.getAllTweets(limit=limit)
+    tweets=getTweetsFromFile(fileName);
     if similarityType==LED_SIM :
         s=LEDSimilarityMatrixBuilder(timeThreshold=TIME_RESOLUTION,distanceThreshold=DISTANCE_RESOLUTION,useOnlyHashtags=useOnlyHashtags)
         eventDetector=EventDetector(tweets,s)
@@ -80,16 +104,16 @@ def detectEvents(limit=300,similarityType=MED_SIM,minimalTermPerTweet=MIN_TERM_O
     if printInFile :
         txtFile=open(printInFile, 'w')
         elapsed_time=(time.time()-staringTime)
-        txtFile.write("Total elapsed time : {0}s\n".format(elapsed_time))
-        txtFile.write("-"*40+"\n")
-        SEPARATOR="\t|"
-        HEADER="|"+SEPARATOR.join(["Median time","estimated duration (s)","mean latitude","mean longitude","radius (m)","user number","tweets number","top hashtags"])+SEPARATOR+"\n"
+        #txtFile.write("Total elapsed time : {0}s\n".format(elapsed_time))
+        #txtFile.write("-"*40+"\n")
+        SEPARATOR=","
+        HEADER=SEPARATOR.join(["key","event.type","eventDetector.endEpoch","event.strength","event.periodicity","event.period","mean_time","stddev_time","expression","dispersion","count","medoid","community_ID","nb_events_covered","dispersion","count","number_of_hashtags","covered_events"])+"\n"
         txtFile.write(HEADER)
-        txtFile.write("-"*40+"\n")
+        #txtFile.write("-"*40+"\n")
         for event in events :
             line=eventDetector.getStringOfEvent(event)
             txtFile.write(line+"\n")
-            txtFile.write("-"*40+"\n")
+            #txtFile.write("-"*40+"\n")
         txtFile.close();
         
     return events
@@ -129,9 +153,9 @@ def showTermOccurenceDistribution(limit=300,mongoDBName='Twitter',mongoCollectio
     tweets=mongoDBHandler.getAllTweets(limit=limit)
     plotTermOccurencesDistribution(tweets,useOnlyHashtags=useOnlyHashtags)
 #---------------------------------------------------------------------------------------------------------------------------------------------  
-def main(limit=300, similarityType=MED_SIM_WITHOUT_REAL_MATRIX,useOnlyHashtags=False,mongoDBName='Twitter',mongoCollectionName="tweets") :
+def main(limit=300, similarityType=MED_SIM,useOnlyHashtags=True,fileName="inputTweets.txt", outputFilePath="retrievedEvents.txt") :
     staringTime=time.time()
-    detectEvents(limit=limit,similarityType=similarityType,useOnlyHashtags=useOnlyHashtags,mongoDBName=mongoDBName,mongoCollectionName=mongoCollectionName,printEvents=False,printInFile="events.txt")
+    detectEvents(limit=limit,similarityType=similarityType,useOnlyHashtags=useOnlyHashtags,printEvents=False,fileName=fileName,printInFile=outputFilePath)
     elapsed_time=(time.time()-staringTime)
     print "-"*40
     print "Elapsed time : {0}s".format(elapsed_time)
@@ -148,5 +172,12 @@ def main(limit=300, similarityType=MED_SIM_WITHOUT_REAL_MATRIX,useOnlyHashtags=F
 #showTermSpaceDistributionByOrder(limit=NUMBER_OF_TWEETS,topTermOrder=0)
 #showTermOccurenceDistribution(limit=NUMBER_OF_TWEETS_MEHDI,useOnlyHashtags=True,mongoDBName='Twitter',mongoCollectionName="tweetsMehdi")
 #---------------------------------------------------------------------------------------------------------------------------------------------
-main(limit=300, similarityType=LED_SIM,useOnlyHashtags=True,mongoDBName='Twitter',mongoCollectionName="tweetsMehdi")
+    
+parser = argparse.ArgumentParser()
+parser.add_argument("--inputFile", help="the path of the input file")
+parser.add_argument("--outputPath", help="the path of the result file")
+args = parser.parse_args()
+
+# TODO: Add the filepath ARGS
+main(limit=300, similarityType=MED_SIM,useOnlyHashtags=True, fileName=args.inputFile, outputFilePath=args.outputPath)
 #---------------------------------------------------------------------------------------------------------------------------------------------
